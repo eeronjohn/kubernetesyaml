@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sampledeploy01
+spec:
+  selector:
+    matchLabels:
+      app: sampleapp01
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0%
+      maxUnavailable: 100%
+  template:
+    metadata:
+      labels:
+        app: sampleapp01
+      annotations:
+        isEdgeDeployment: "true"
+        targetCondition: "tags.testtag='A'"
+        priority: "15"
+        loggingOptions: ""
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - sampleapp01
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: squareimagedetection
+        image: "wowcontainerreg1.azurecr.io/python-module:0.0.1-amd64"
+      nodeSelector:
+        type: virtual-kubelet
+      tolerations:
+      - key: virtual-kubelet.io/provider
+        operator: Equal
+        value: iotedge
+        effect: NoSchedule
+      - key: node.kubernetes.io/network-unavailable
+        operator: Exists
+        effect: NoSchedule
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: edgehub
+data:
+  desiredProperties: |
+    {
+      "routes": {
+        "route": "FROM /messages/modules/squareimagedetection/outputs/output1 INTO BrokeredEndpoint(\"/modules/module02/inputs/input1\")"
+      },
+      "storeAndForwardConfiguration": {
+        "timeToLiveSecs": 7200
+      }
+    }
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: squareimagedetection
+data:
+  status: running
+  restartPolicy: on-unhealthy
+  version: "1.0"
+  createOptions: |
+    {
+      "HostConfig": {
+        "PortBindings": {
+          "8081/tcp": [
+            {
+              "HostPort": "8081"
+            }
+          ]
+        }
+      }
+    }
+---

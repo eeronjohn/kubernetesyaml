@@ -1,0 +1,85 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sampledeploy02
+spec:
+  selector:
+    matchLabels:
+      app: sampleapp02
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0%
+      maxUnavailable: 100%
+  template:
+    metadata:
+      labels:
+        app: sampleapp02
+      annotations:
+        isEdgeDeployment: "true"
+        targetCondition: "tags.testtag='B'"
+        priority: "15"
+        loggingOptions: ""
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - sampleapp02
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+      - name: simulatedtemperaturesensor
+        image: "mcr.microsoft.com/azureiotedge-simulated-temperature-sensor:1.0"
+      nodeSelector:
+        type: virtual-kubelet
+      tolerations:
+      - key: virtual-kubelet.io/provider
+        operator: Equal
+        value: iotedge
+        effect: NoSchedule
+      - key: node.kubernetes.io/network-unavailable
+        operator: Exists
+        effect: NoSchedule
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: edgehub
+data:
+  desiredProperties: |
+    {
+      "routes": {
+        "route": "FROM /messages/modules/simulatedtemperaturesensor/outputs/output1 INTO BrokeredEndpoint(\"/modules/module02/inputs/input1\")"
+      },
+      "storeAndForwardConfiguration": {
+        "timeToLiveSecs": 7200
+      }
+    }
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: simulatedtemperaturesensor
+data:
+  status: running
+  restartPolicy: on-unhealthy
+  version: "1.0"
+  createOptions: |
+    {
+      "HostConfig": {
+        "PortBindings": {
+          "8081/tcp": [
+            {
+              "HostPort": "8081"
+            }
+          ]
+        }
+      }
+    }
+---
